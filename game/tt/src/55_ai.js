@@ -35,10 +35,10 @@
 const AI_LEVELS = [
   {
     id: 0, name: 'НОВИЧОК', tag: 'ROOKIE', elo: 900, style: 'PUSHER',
-    react: 0.38, move: 1.55, posErr: 0.28, skill: 0.30, spinRead: 0.16,
-    aggro: 0.06, variety: 0.35,
-    vmagMin: 2.0, vmagMax: 3.8, paceOpen: 0.16, paceRamp: 0.02, paceMax: 0.32,
-    windup: 0.38, errBase: 0.38, errPress: 0.16, deepness: 0.48, placeSkill: 0.12,
+    react: 0.38, move: 1.4, posErr: 0.30, skill: 0.26, spinRead: 0.14,
+    aggro: 0.05, variety: 0.32,
+    vmagMin: 1.6, vmagMax: 3.0, paceOpen: 0.12, paceRamp: 0.016, paceMax: 0.24,
+    windup: 0.42, errBase: 0.42, errPress: 0.18, deepness: 0.45, placeSkill: 0.10,
     counterRate: 0.01, smashRate: 0.0, dropRate: 0.02,
   },
   {

@@ -25,12 +25,16 @@
  * ===================================================================== */
 'use strict';
 
-/* Stable front-facing views. Legacy IDs keep existing saves compatible. */
+/* Stable front-facing views. Legacy IDs keep existing saves compatible.
+ * DYNAMIC — дефолт для новичка: самый высокий из стабильных ракурсов
+ * (pitch 34). Выше нельзя без нарушения контракта кадрирования (контакт
+ * соперника уходит за верхний край, а досягаемость ракетки на портрете
+ * падает ниже 75% высоты игровой зоны — см. tests/camera.test.js). */
 const CAMERA_PRESETS = {
   BROADCAST: { id: 'BROADCAST', ru: 'ИГРОВАЯ', short: 'ИГРА',
     desc: 'Весь стол и обе половины', pitch: 24, vfov: 48, nearY: 0.620, topMin: 0.155 },
   DYNAMIC: { id: 'DYNAMIC', ru: 'ОБЗОР', short: 'ОБЗОР',
-    desc: 'Выше: легче читать отскок', pitch: 30, vfov: 52, nearY: 0.625, topMin: 0.150 },
+    desc: 'Выше: легче читать отскок и прилетающий мяч', pitch: 32, vfov: 52, nearY: 0.625, topMin: 0.150 },
   LOW: { id: 'LOW', ru: 'БЛИЖЕ', short: 'БЛИЖЕ',
     desc: 'Низкий и близкий — взгляд почти с уровня сетки', pitch: 15, vfov: 52, nearY: 0.560, topMin: 0.130 },
 };
