@@ -93,7 +93,7 @@ class Game {
       quality: 'high',
       sound: true,
       volume: 0.9,
-      camera: 'BROADCAST',
+      camera: 'DYNAMIC',
       hand: 'right',
       grip: 'shakehand',
       showTrail: true,
@@ -103,7 +103,7 @@ class Game {
       coach: true,
       adaptive: true,
       showDebug: false,
-      showPlayerPaddle: true,
+      showPlayerPaddle: false,
       slowmoOnBigShots: true,
       targetScore: 11,
       spinBias: 'norm',
@@ -526,6 +526,12 @@ class Game {
     this.director.enabled = this.settings.adaptive;
     this.pointNote = null;
     if (diff !== undefined) { this.settings.difficulty = diff; this.ai.setLevel(diff); }
+    // Beginner aid: widen the player's hit window on easy levels so the rally
+    // survives long enough to learn. Online matches are excluded — neither side
+    // may get a larger hit box than the other. Level >= 2 stays at 1.0 (the
+    // authored, expert-tuned values), so the high tiers are untouched.
+    if (this.network && this.network.isInMatch) setPlayerHelp(2);
+    else setPlayerHelp(this.settings.difficulty || 0);
     // career: the chop perk slows the opponent, always from the base speed
     if (this.career.active && this._careerAISlowdown < 1) {
       this.ai.maxSpeed = this.ai.L.move * this._careerAISlowdown;

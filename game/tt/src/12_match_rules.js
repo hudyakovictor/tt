@@ -7,6 +7,39 @@
  * сам MATCH_RULES остаётся замороженным. */
 let CAPTURE_FORGIVE = 1;
 function setCaptureForgiveness(k) { CAPTURE_FORGIVE = (Number.isFinite(k) && k > 0) ? k : 1; }
+
+/* ---------------------------------------------------------------------
+ *  DIFFICULTY-SCALED PLAYER HELP  (the "can't hit the ball" fix)
+ *
+ *  The authored capture radius, depth tolerance and press-gate are tuned for
+ *  an expert. A beginner on NOVICE (or the first career opponent) cannot get
+ *  the ball back often enough to learn, so the rally dies before any skill
+ *  develops. We widen the player's window with difficulty:
+ *    - gate     scales the on-screen press oval (where the swipe may START),
+ *    - capture  scales the physical capture radius (how close the blade must
+ *                be to the ball),
+ *    - depth    scales the depth tolerance (front/back reach),
+ *    - serve    scales the serve toss capture.
+ *  Level >= 2 (PRO and above) keeps the exact authored values (multiplier 1).
+ *  This is a SINGLE-PLAYER aid only: online matches reset it to 1.0 so no
+ *  side gets a larger hit box than the other. Defaults to 1.0 so every
+ *  existing test that does not call setPlayerHelp sees no behaviour change.
+ * ------------------------------------------------------------------- */
+let PLAYER_HELP = { gate: 1, capture: 1, depth: 1, serve: 1 };
+function setPlayerHelp(level) {
+  const L = (level | 0);
+  const T = {
+    0: { gate: 1.80, capture: 1.80, depth: 1.80, serve: 1.55 },
+    1: { gate: 1.40, capture: 1.40, depth: 1.40, serve: 1.28 },
+    2: { gate: 1.00, capture: 1.00, depth: 1.00, serve: 1.00 },
+    3: { gate: 1.00, capture: 1.00, depth: 1.00, serve: 1.00 },
+    4: { gate: 1.00, capture: 1.00, depth: 1.00, serve: 1.00 },
+  }[L] || { gate: 1, capture: 1, depth: 1, serve: 1 };
+  PLAYER_HELP = { gate: T.gate, capture: T.capture, depth: T.depth, serve: T.serve };
+  return PLAYER_HELP;
+}
+function playerHelp() { return PLAYER_HELP; }
+function resetPlayerHelp() { PLAYER_HELP = { gate: 1, capture: 1, depth: 1, serve: 1 }; return PLAYER_HELP; }
 const MATCH_RULES = Object.freeze(Object.assign({
   version: 4,
   zoneShape: 'oval',           // 'circle' keeps pressHitZone for A/B comparison
@@ -73,8 +106,10 @@ function installUnifiedControls(settings) {
   return settings;
 }
 function playerCaptureLimits(isServe) {
-  return { radius: (isServe ? MATCH_RULES.serveCaptureRadius : MATCH_RULES.captureRadius) * CAPTURE_FORGIVE,
-    depth: MATCH_RULES.depthTolerance * CAPTURE_FORGIVE, sweet: MATCH_RULES.sweetRadius };
+  const k = isServe ? PLAYER_HELP.serve : PLAYER_HELP.capture;
+  const dk = PLAYER_HELP.depth;
+  return { radius: (isServe ? MATCH_RULES.serveCaptureRadius : MATCH_RULES.captureRadius) * CAPTURE_FORGIVE * k,
+    depth: MATCH_RULES.depthTolerance * CAPTURE_FORGIVE * dk, sweet: MATCH_RULES.sweetRadius };
 }
 /** Endpoint capture used by impact AND the timing cue. CCD remains the
  * additional continuous path for a fast crossing between physical substeps.
@@ -83,9 +118,9 @@ function playerCaptureLimits(isServe) {
 function playerInCaptureRange(ball, paddle, isServe = false) {
   if (!ball || !paddle || ![ball.x, ball.y, ball.z, paddle.x, paddle.y, paddle.z].every(Number.isFinite)) return false;
   const dx = ball.x - paddle.x, dy = ball.y - paddle.y, dz = ball.z - paddle.z;
-  return isServe ? Math.hypot(dx, dy, dz) <= MATCH_RULES.serveCaptureRadius * CAPTURE_FORGIVE
-    : Math.hypot(dx, dy) <= MATCH_RULES.captureRadius * CAPTURE_FORGIVE
-      && Math.abs(dz) <= MATCH_RULES.depthTolerance * CAPTURE_FORGIVE;
+  return isServe ? Math.hypot(dx, dy, dz) <= MATCH_RULES.serveCaptureRadius * CAPTURE_FORGIVE * PLAYER_HELP.serve
+    : Math.hypot(dx, dy) <= MATCH_RULES.captureRadius * CAPTURE_FORGIVE * PLAYER_HELP.capture
+      && Math.abs(dz) <= MATCH_RULES.depthTolerance * CAPTURE_FORGIVE * PLAYER_HELP.depth;
 }
 /** Pure overlay model: cue follows the ball; no fake area-of-effect circle.
  * A warm solid bracket means an available time/position window, never an
@@ -237,12 +272,13 @@ function pressOvalBlendAxis(reference, velocityAxis, blend) {
 function pressHitZoneOval(ball, pointer, width, height, opts = {}) {
   if (!ball || !pointer || ![pointer.x, pointer.y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return null;
   const lead = Number.isFinite(opts.leadSec) && opts.leadSec > 0 ? opts.leadSec : MATCH_RULES.ovalLeadSec;
-  const fwdPx = Number.isFinite(opts.fwdPx) && opts.fwdPx > 0 ? opts.fwdPx : MATCH_RULES.ovalForwardPx;
+  const g = PLAYER_HELP.gate;
+  const fwdPx = Number.isFinite(opts.fwdPx) && opts.fwdPx > 0 ? opts.fwdPx : MATCH_RULES.ovalForwardPx * g;
   const forwardMaxPx = Number.isFinite(opts.forwardMaxPx) && opts.forwardMaxPx > 0
-    ? opts.forwardMaxPx : MATCH_RULES.ovalForwardMaxPx;
-  const backPx = Number.isFinite(opts.backPx) && opts.backPx > 0 ? opts.backPx : MATCH_RULES.ovalBackPx;
+    ? opts.forwardMaxPx : MATCH_RULES.ovalForwardMaxPx * g;
+  const backPx = Number.isFinite(opts.backPx) && opts.backPx > 0 ? opts.backPx : MATCH_RULES.ovalBackPx * g;
   const pointerType = opts.pointerType || opts.inputType || 'touch';
-  const sidePx = pressOvalSidePx(pointerType, opts);
+  const sidePx = pressOvalSidePx(pointerType, opts) * g;
   if (!(lead > 0) || !(fwdPx > 0) || !(forwardMaxPx > 0) || !(backPx > 0) || !(sidePx > 0)) return null;
 
   let center = null, screenVx = 0, screenVy = 0, worldVelocity = null;
@@ -379,10 +415,11 @@ function contactGateExtents(pointerType, scale) {
   const lim = (k) => Math.min(R.zoneScaleMax || 1.5, Math.max(R.zoneScaleMin || .75, k));
   const kx = world ? lim(scale.kx) : 1, ky = world ? lim(scale.ky) : 1;
   const minSide = (mouse ? R.contactMinSideMousePx : R.contactMinSideTouchPx) || 0, minAlong = R.contactMinAlongPx || 0;
+  const g = PLAYER_HELP.gate;
   return { kx, ky,
-    sidePx: Math.max(minSide, (mouse ? R.contactSideMousePx : R.contactSideTouchPx) * kx),
-    fwdPx: Math.max(minAlong, R.contactForwardPx * ky),
-    backPx: R.contactBackPx > 0 ? Math.max(Math.min(minAlong, R.contactBackPx), R.contactBackPx * ky) : 1e-3 };
+    sidePx: Math.max(minSide, (mouse ? R.contactSideMousePx : R.contactSideTouchPx) * kx) * g,
+    fwdPx: Math.max(minAlong, R.contactForwardPx * ky) * g,
+    backPx: (R.contactBackPx > 0 ? Math.max(Math.min(minAlong, R.contactBackPx), R.contactBackPx * ky) : 1e-3) * g };
 }
 function pressContactZone(contactScreen, pointer, width, height, opts = {}) {
   if (!contactScreen || !contactScreen.ok) return null;

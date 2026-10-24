@@ -357,6 +357,11 @@ class UI {
       for (const selector of ['#captureDebugPause', '#captureDebugLab']) $(selector).checked = this.captureDebug;
       this.syncNativeCursor();
     });
+    const paddleVis = $('#paddleVis');
+    if (paddleVis) paddleVis.addEventListener('change', event => {
+      this.game.settings.showPlayerPaddle = event.target.checked;
+      this.game.saveSettings();
+    });
 
     const pResume = $('#pauseResume'), pMenu = $('#pauseToMenu');
     if (pResume) pResume.addEventListener('click', (e) => { e.stopPropagation(); this.game.setPaused(false); });
@@ -694,6 +699,7 @@ class UI {
       case 'hand': case 'grip': g.changePaddlePreference(k, v); break;
       case 'trail': s.showTrail = v === 'on'; break;
       case 'predict': s.showPredict = v === 'on'; break;
+      case 'paddle': s.showPlayerPaddle = v === 'on'; break;
       case 'tele': s.showTele = v === 'on'; $('#spin').classList.toggle('on', s.showTele); break;
       case 'coach': s.coach = v === 'on'; if (!s.coach) this.hideNote(); break;
       case 'adaptive':
@@ -718,6 +724,8 @@ class UI {
 
   syncSettings() {
     const s = this.game.settings;
+    const paddleVis = $('#paddleVis');
+    if (paddleVis) paddleVis.checked = s.showPlayerPaddle === true;
     for (const k of ['hand', 'grip']) {
       $$(`.opt[data-set="${k}"]`).forEach(b => {
         const selected = b.dataset.val === s[k];
