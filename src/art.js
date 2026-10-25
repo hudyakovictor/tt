@@ -189,9 +189,45 @@ const Art = (() => {
       </g></svg>`;
   }
 
+  /* Иллюстрации (ILL) — необязательный слой: в сборке без src/ill/ словарь
+     пуст, и `url(undefined)` уходил в сеть запросом /undefined (404 на каждом
+     экране с иллюстрацией). Возвращаем '' — вызывающий код просто не рисует
+     слой, а верстка остаётся прежней. */
+  function ill(key) {
+    const v = (typeof ILL !== 'undefined' && ILL && ILL[key]) || '';
+    return v;
+  }
+  function illLayer(cls, key, extra = '') {
+    const src = ill(key);
+    /* Узел остаётся всегда: он абсолютный и держит раскладку соседей, а вот
+       фон появляется только с реальной картинкой — иначе браузер тянет
+       /undefined (404). */
+    return `<i class="${cls}"${extra ? ' ' + extra : ''}${src ? ` style="background-image:url('${src}')"` : ''}></i>`;
+  }
+
+  /* Портрета нет (в репозитории нет src/av/*.webp) — раньше подставлялся
+     undefined и браузер шёл в сеть за /undefined, а игрок видел серый круг.
+     Теперь рисуем детерминированный градиент по ключу: у каждого соперника
+     свой цвет, никаких запросов. */
+  function avatarFallback(key) {
+    let h = 0; for (const ch of String(key)) h = (h * 31 + ch.charCodeAt(0)) % 360;
+    const h2 = (h + 42) % 360;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${h},76%,60%)"/><stop offset="1" stop-color="hsl(${h2},70%,34%)"/></linearGradient></defs>
+      <rect width="64" height="64" fill="url(#g)"/>
+      <circle cx="32" cy="25" r="10.5" fill="rgba(12,10,24,.28)"/>
+      <path d="M12 64c1.5-12 9-19 20-19s18.5 7 20 19z" fill="rgba(12,10,24,.28)"/>
+      <circle cx="32" cy="25" r="10.5" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/>
+    </svg>`;
+    /* encodeURIComponent не трогает скобки, а `url(...)` в CSS обрывается на
+       первой же `)` из `url(#g)` — браузер выбрасывал всю картинку (в хабе
+       оставался серый круг). Кодируем скобки сами. */
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg).replace(/[()]/g, (c) => (c === '(' ? '%28' : '%29'));
+  }
+
   /* аватар: генеративный портрет + рамка лиги */
   function avatar(key, size = 48, { ring = null, round = true } = {}) {
-    const src = AVATARS[key] || AVATARS.me;
+    const src = AVATARS[key] || AVATARS.me || avatarFallback(key);
     const r = round ? '50%' : Math.round(size * .28) + 'px';
     const border = ring ? `box-shadow:0 0 0 2px ${ring},0 0 14px ${ring}66;` : '';
     return `<span class="avatar" style="display:block;width:${size}px;height:${size}px;border-radius:${r};background:#111 url(${src}) center/cover;${border}"></span>`;
@@ -273,5 +309,5 @@ const Art = (() => {
       <path d="M16 12a4 4 0 0 1 4-2" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>`;
   }
 
-  return { coin, gem, star, trophy, badge, chest, CHEST, paddle, rubber, blade, avatar, icon, navIcon };
+  return { coin, gem, star, trophy, badge, chest, CHEST, paddle, rubber, blade, avatar, icon, navIcon, ill, illLayer };
 })();

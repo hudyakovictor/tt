@@ -42,10 +42,21 @@ const GameHost = {
     this.reload();
     Object.entries(sticky).forEach(([t, d]) => this.send(t, d));
     if (mode) {
-      if (mode.type === 'match' && m.inMatch) this.send('match', Object.assign({}, mode.data, { resume: { score: m.score, server: m.server } }));
-      else if (mode.type === 'train') this.send('train', { step: Number.isFinite(m.training) ? m.training : (mode.data.step || 0) });
-      else if (mode.type !== 'match') this.send(mode.type, mode.data);
-      else this.send('attract');
+      /* A lost context must never leave a DEAD match on screen. The old
+       * fallback sent 'attract' for a match that was not yet in play — which
+       * is exactly the pre-match fly-in and the first second of every match,
+       * the two moments a phone is most likely to drop the context. Measured
+       * in the headless host run: the match screen stayed up with the engine
+       * sitting in MENU, a slowly orbiting table nobody could play. The
+       * screen the player is looking at decides what to rebuild: if it is a
+       * match, it gets a match (resumed when there was a score to keep). */
+      if (mode.type === 'match') {
+        this.send('match', m.inMatch
+          ? Object.assign({}, mode.data, { resume: { score: m.score, server: m.server } })
+          : Object.assign({}, mode.data));
+      } else if (mode.type === 'train') {
+        this.send('train', { step: Number.isFinite(m.training) ? m.training : (mode.data.step || 0) });
+      } else this.send(mode.type, mode.data);
     }
     if (paused) this.send('pause');
     if (!$('#gamelayer').classList.contains('on')) { this._asleep = true; this.send('sleep'); }

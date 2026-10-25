@@ -13,7 +13,7 @@ Router.def('mm', {
     const L = leagueOf(S.rating);
     const reel = [...Array(24)].map((_, i) => { const k = i % 8; return `<span class="ri">${Art.avatar('p' + k, 64, { round: false })}</span>`; }).join('');
     return `<div class="mm safe-top">
-      <i class="mm-ill" style="background-image:url('${ILL.radar}')"></i>
+      ${Art.illLayer('mm-ill', 'radar')}
       <div class="mm-top"><span class="chip gold">${Art.icon(MODE.i, { c: '#FFE28A' })} ${MODE.t} · ${L.n}</span>
         <div class="h1 mm-t">Поиск соперника<span class="dots"><i>.</i><i>.</i><i>.</i></span></div>
         <div class="mm-time num">0:00</div></div>
@@ -65,7 +65,7 @@ Router.def('vs', {
   full: true, mood: 'battle',
   render() {
     const o = PEOPLE[BATTLE.opp]; const Lo = leagueOf(o.r), Lm = leagueOf(S.rating);
-    const stat = (l, a, b) => `<div class="vs-st"><b class="num">${a}</b><span>${l}</span><b class="num">${b}</b><i style="--a:${a / (a + b)}"></i></div>`;
+    const stat = (l, a, b) => `<div class="vs-st"><b class="num">${a}</b><span>${l}</span><b class="num">${b}</b><i style="--a:${a / Math.max(1, a + b)}"></i></div>`;
     return `<div class="vs">
       <div class="vs-half top" style="--c1:${o.c[0]};--c2:${o.c[1]}">
         <div class="vs-art">${Art.avatar('p' + BATTLE.opp, 210, { round: false })}</div>
@@ -76,7 +76,7 @@ Router.def('vs', {
         <div class="vs-info"><span class="vs-badge">${Art.badge(Lm, 44)}</span><b class="h-display">${S.name.split(' ')[0]}</b><span class="mut">${S.club} · <b class="num">${fmt(S.rating)}</b></span></div>
       </div>
       <div class="vs-mid"><div class="vs-logo"><span class="v">V</span><span class="s">S</span></div></div>
-      <div class="vs-stats pnl">${stat('Винрейт %', Math.round(S.wins / (S.wins + S.losses) * 100), o.wr)}${stat('Серия', S.streak, 2)}${stat('Лучший розыгрыш', S.bestRally, 19)}</div>
+      <div class="vs-stats pnl">${stat('Винрейт %', (S.wins + S.losses) ? Math.round(S.wins / (S.wins + S.losses) * 100) : 0, o.wr)}${stat('Серия', S.streak, 2)}${stat('Лучший розыгрыш', S.bestRally, 19)}</div>
     </div>`;
   },
   mount(el) {
@@ -114,7 +114,26 @@ const REASON = (who, r) => {
   if (r.includes('ПОДАЧ')) return 'Ошибка подачи';
   return 'Мимо';
 };
-const DIFF = { ranked: 1, quick: 0 };
+/* Difficulty is EARNED, not declared. The old table sent a fresh player
+ * straight to ЛЮБИТЕЛЬ (ranked), and the +1 for a >2300 opponent could start
+ * them at ПРО — "первый соперник непобедим" is exactly what that produces.
+ * Form is the last eight results; no history at all means a first-time
+ * player, who meets the level-0 opponent. */
+function recentForm() {
+  const r = Array.isArray(S.recent) ? S.recent.slice(-8) : [];
+  if (!r.length) return null;
+  return r.reduce((a, b) => a + (b ? 1 : 0), 0) / r.length;
+}
+function aiDiffFor(opp) {
+  const r = Array.isArray(S.recent) ? S.recent.slice(-16) : [];
+  const n = r.length, form = recentForm();
+  let d = 0;
+  if (n >= 3) d = form >= 0.5 ? 1 : 0;
+  if (n >= 8) d = form >= 0.6 ? 2 : form >= 0.4 ? 1 : 0;
+  if (n >= 16) d = form >= 0.7 ? 3 : form >= 0.5 ? 2 : 1;
+  if (PEOPLE[opp] && PEOPLE[opp].r > 2350) d += 1;      // a top opponent is a step up
+  return clamp(d, 0, 4);
+}
 const TARGET = { ranked: 11, quick: 7, practice: 11 };
 const devBtn = () => (DEVMODE ? `<button class="ib mx-dev pe" data-act="dev" aria-label="Зона удара">${Art.icon('target', { c: '#9BE8FF', sw: 2.4 })}</button>` : '');
 
@@ -152,7 +171,7 @@ Router.def('match', {
     TGX.fullscreen(true);                // застрять в иммерсиве можно и без жеста — хуже не станет
     TGX.guard(true);                     // не дать случайно закрыть приложение среди розыгрыша
     this.el = el; this.alive = true; this.timers = [];
-    const st = this.st = { p: 0, o: 0, server: 0, over: false, hits: 0, perfect: 0, smash: 0, maxRally: 0, myServes: 0, live: false, spin: 0, oppHits: 0, rallyHits: 0, servePts: 0, serveWon: 0 };
+    const st = this.st = { p: 0, o: 0, server: 0, over: false, hits: 0, perfect: 0, smash: 0, maxRally: 0, myServes: 0, live: false, spin: 0, oppHits: 0, rallyHits: 0, servePts: 0, serveWon: 0, paused: false, engine: null };
     GameHost.ensure(); GameHost.show(true); GameHost.send('quiet', { on: true }); GameHost.send('mute', { on: !S.sfx });
     this.off = GameHost.on((m) => this.onMsg(m));
     el.querySelector('[data-act=pause]').addEventListener('click', () => this.pause());
@@ -178,10 +197,44 @@ Router.def('match', {
      * пролетал в 1.8 раза быстрее, чем считает человек */
     for (const n of ['3', '2', '1']) { c.innerHTML = `<b>${n}</b>`; Sfx.count(1); haptic('medium'); await sleep(980); if (!this.alive) return; }
     c.innerHTML = '<b class="go">Игра!</b>'; Sfx.count(0); haptic('heavy'); flash('#fff', .25, 260);
-    GameHost.send('match', { diff: (DIFF[MODE.id] ?? 1) + (PEOPLE[BATTLE.opp].r > 2300 ? 1 : 0), target: TARGET[MODE.id] || 11, hint: !!S.hint });
+    this.st.engine = null;               // a stale SERVE_READY must not hide a dead arena
+    GameHost.send('match', { diff: aiDiffFor(BATTLE.opp), target: TARGET[MODE.id] || 11, hint: !!S.hint });
     GameHost.send('quiet', { on: false });
     mx.classList.remove('bars', 'cine'); mx.classList.add('live'); this.st.live = true;
+    this.watchArena();
     await sleep(520); c.innerHTML = '';
+  },
+  /* The match screen owns a promise the engine can silently break: "I sent
+   * match, therefore we are playing". A dropped WebGL context, a swallowed
+   * postMessage or a reload in between all leave the arena in MENU — the
+   * table orbits, the player taps, nothing happens. This watchdog asks the
+   * only question that matters ("is the engine in a playing state?") and
+   * re-sends the match when the answer has been no for a full second. It
+   * never resends while the player is paused or the point is over. */
+  watchArena() {
+    const PLAYING = ['SERVE_READY', 'SERVE_TOSS', 'RALLY', 'POINT'];
+    let miss = 0, sends = 0;
+    /* Постоянное наблюдение, а не три попытки: перезагрузка арены после
+       потери GPU-контекста занимает несколько секунд, и раньше счётчик
+       «сдавался» ровно в этот момент. Здоровая арена просто продлевает
+       таймер; сломанная — получает match заново, с текущим счётом. */
+    const loop = () => this.later(() => {
+      const st = this.st;
+      if (!this.alive || !st.live || st.over || st.paused) return;
+      if (PLAYING.includes(st.engine)) { miss = 0; sends = 0; loop(); return; }
+      if (++miss < 2) { loop(); return; }             // одна «пустая» секунда — ещё не зависание
+      miss = 0;
+      if (sends >= 3) { loop(); return; }             // три перезапуска на матч, дальше только смотрим
+      sends++;
+      if (sends === 3) this.banner('<b>Арена перезапускается</b><small>ещё раз</small>', 'lose', 2200);
+      /* Счёт экрана важнее чистоты: рестарт не должен стирать 7:5. Движок
+       * по resume продолжает с того же места и без облёта камеры. */
+      const data = { diff: aiDiffFor(BATTLE.opp), target: TARGET[MODE.id] || 11, hint: !!S.hint };
+      if (st.p + st.o > 0) data.resume = { score: [st.p, st.o], server: st.server };
+      GameHost.send('match', data);
+      loop();
+    }, sends >= 3 ? 4000 : 1500);
+    loop();
   },
   banner(html, cls = '', ms = 1000) {
     const b = this.el.querySelector('.m-banner'); b.className = 'm-banner ' + cls; b.innerHTML = html; void b.offsetWidth; b.classList.add('on');
@@ -189,6 +242,10 @@ Router.def('match', {
   },
   onMsg(m) {
     const el = this.el, st = this.st; if (!this.alive || st.over && m.type !== 'replayEnd' && m.type !== 'matchEnd') return;
+    /* The engine announces every state change; remembering the last one is
+     * what lets the match screen notice that the arena is not actually
+     * playing (see watchArena). */
+    if (m.type === 'state' && m.s) st.engine = m.s;
     const serveEl = el.querySelector('.m-serve'), rallyEl = el.querySelector('.m-rally'), rallyN = rallyEl.querySelector('b');
     const px = (m) => ({ x: (m.x || .5) * FX.W, y: (m.y || .6) * FX.H });
     if (m.type === 'serve') {
@@ -237,6 +294,7 @@ Router.def('match', {
   },
   pause(fromGame) {
     if (this.st.over) return;
+    this.st.paused = true;
     GameHost.send('pause');
     Sheet.open(`<div class="h1" style="margin:4px 4px 6px">Пауза</div><p class="dim" style="margin:0 4px 16px;font-size:12.5px">Счёт ${this.st.p}:${this.st.o}. Соперник ждёт.</p>
       <div style="display:grid;gap:12px"><button class="b3 green block" data-a="resume"><span class="shine"></span>${Art.icon('play', { c: '#fff' })}Продолжить</button>
@@ -260,7 +318,7 @@ Router.def('match', {
     const host = $('#sheets'); if (!host) return;
     this._mo = new MutationObserver(() => {
       if (!Sheet.cur && !this.st.over && this.alive) {
-        this._mo.disconnect(); this._mo = null;
+        this._mo.disconnect(); this._mo = null; this.st.paused = false;
         GameHost.send('mute', { on: !S.sfx }); GameHost.send('hint', { on: !!S.hint }); GameHost.send('resume');
       }
     });
@@ -489,7 +547,7 @@ Router.def('result', {
     this.medals = medals;
     const L = leagueOf(S.rating), N = nextLeague(S.rating);
     return `<div class="res ${d.win ? 'win' : 'lose'}">
-      <i class="res-ill" style="background-image:url('${d.win ? ILL.win : ILL.lose}')"></i>
+      ${Art.illLayer('res-ill', d.win ? 'win' : 'lose')}
       <div class="hud mini">${''}<div style="flex:1"></div>
         <div class="cur" data-cur="coins"><span class="ci">${Art.coin(36)}</span><span class="v num">${fmt(S.coins)}</span></div>
         <div class="cur" data-cur="gems"><span class="ci">${Art.gem(34)}</span><span class="v num">${fmt(S.gems)}</span></div></div>
@@ -529,6 +587,9 @@ Router.def('result', {
       this.r0 = S.rating; this.x0 = S.xp;
       S.rating += this.delta;
       if (d.win) { S.wins++; S.streak++; } else { S.losses++; S.streak = 0; }
+      /* Form drives the next opponent's level (see aiDiffFor). Sixteen is
+       * enough history for the 16-match tier and still tiny in storage. */
+      S.recent = [...(Array.isArray(S.recent) ? S.recent : []), d.win ? 1 : 0].slice(-16);
       const add = d.win ? 180 : 60;
       this.xv = Math.min(S.xp + add, S.xpMax); this.xpBar = Math.min(1, (S.xp + add) / S.xpMax);
       S.xp += add; this.lvlUp = false;

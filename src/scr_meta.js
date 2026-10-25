@@ -14,7 +14,7 @@ const ItemArt = {
       <path d="M18 62v20M82 62v20M50 78v14" stroke="#0A0D1E" stroke-width="4"/></svg>`;
   },
   of(it, size, opt = {}) {
-    const ill = (typeof ILL !== 'undefined') && ILL['shop_' + it.id.replace('-', '_')];
+    const ill = Art.ill('shop_' + it.id.replace('-', '_'));
     if (ill) return `<i class="ilf" style="display:block;width:${size}px;height:${size}px;background-image:url('${ill}');background-size:contain;background-position:center;background-repeat:no-repeat;-webkit-mask:radial-gradient(closest-side,#000 72%,transparent 100%);mask:radial-gradient(closest-side,#000 72%,transparent 100%)"></i>`;
     return it.kind === 'trail' ? this.comet(size, it.col) : it.kind === 'table' ? this.table(size, it.col) : it.kind === 'rubber' ? Art.rubber(it.col, size, opt) : it.kind === 'blade' ? Art.blade(it.col, size, opt) : Art.paddle(it.col, size);
   }
@@ -44,7 +44,7 @@ Router.def('shop', {
       <div class="pg-head rise" style="--d:0"><div class="h1">Магазин</div><span class="chip">${Art.icon('clock', { c: '#9BE8FF' })} <span class="num" id="shopT">05:12:44</span></span></div>
       <div class="feat rar leg beam rise" style="--d:1" data-feat>
         <div class="ft-ribbon">−45%</div>
-        <div class="ft-art"><i class="ft-ill" style="background-image:url('${ILL.shop_bundle}')"></i></div>
+        <div class="ft-art">${Art.illLayer('ft-ill', 'shop_bundle')}</div>
         <div class="ft-body"><span class="cap" style="color:#FFE28A">Предложение дня</span><b class="h-display">Набор сезона</b>
           <div class="ft-items"><span class="chip gold">Coral Spin</span><span class="chip cyan">+80 гемов</span><span class="chip violet">Рамка</span></div>
           <div class="ft-buy"><s class="dim num ft-old">${Art.icon('tstar', { c: '#FFC93A', fill: '#FFC93A' })} 629</s><button class="b3 sm" data-act="stars" data-amt="349"><span class="shine"></span>${Art.icon('tstar', { c: '#3A1A00', fill: '#3A1A00' })}349</button></div></div>
@@ -101,8 +101,8 @@ Router.def('shop', {
     const own = S.owned.includes(it.id);
     const stats = it.st[0] ? [['Скорость', it.st[0], 'coral'], ['Вращение', it.st[1], 'gold'], ['Контроль', it.st[2], '']] : null;
     Sheet.open(`<div class="prod rar ${it.r}">
-      <div class="pd-stage"><div class="pd-glow"></div>${typeof ILL !== 'undefined' && ILL['shop_' + it.id.replace('-', '_')]
-        ? `<div class="pd-ill" style="background-image:url('${ILL['shop_' + it.id.replace('-', '_')]}')"></div>`
+      <div class="pd-stage"><div class="pd-glow"></div>${Art.ill('shop_' + it.id.replace('-', '_'))
+        ? `<div class="pd-ill" style="background-image:url('${Art.ill('shop_' + it.id.replace('-', '_'))}')"></div>`
         : `<div class="pd-spin" id="pdSpin"><div class="pd-face f">${ItemArt.of(it, 170)}</div><div class="pd-face b">${ItemArt.of(it, 170, { back: true })}</div></div><span class="pd-hint">${it.kind === 'rubber' || it.kind === 'blade' ? 'Крути пальцем' : ''}</span>`}</div>
       <span class="lc-r" style="background:var(--rc)">${RN[it.r]} · ${it.t}</span>
       <div class="h1" style="margin:10px 0 4px">${it.n}</div>
@@ -156,7 +156,7 @@ Router.def('pass', {
     };
     return `${UI.hud()}<div class="scroll" id="passScroll">
       <div class="pass-hero rise" style="--d:0">
-        <i class="ph-ill" style="background-image:url('${ILL.pass_hero}')"></i><i class="ph-shade"></i>
+        ${Art.illLayer('ph-ill', 'pass_hero')}<i class="ph-shade"></i>
         <span class="chip violet">${Art.icon('clock', { c: '#D9C6FF' })} осталось ${SEASON.left}</span>
         <div class="ph-t"><span class="cap">Сезон ${SEASON.n} · ${SEASON.days} дней</span><b class="h-display">Боевой<br>пропуск</b></div>
         <div class="ph-lv"><span class="phl"><span class="num">${S.passLvl}</span></span><div style="flex:1"><div class="cap" style="margin-bottom:6px">Уровень пропуска</div><div class="bar"><i style="--p:${S.passXp / 100}"></i><span class="lbl">${S.passXp} / 100 XP</span></div></div></div>
