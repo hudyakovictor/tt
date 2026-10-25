@@ -63,6 +63,19 @@ const MATCH_RULES = Object.freeze(Object.assign({
 /** Read-only compatibility for old modules/saves. Setters deliberately ignore
  * legacy writes instead of crashing a strict-mode old career/perk caller.
  * Physics reads MATCH_RULES directly. These keys do not enter new saves. */
+/* ---------------------------------------------------------------------
+ *  AUTO-AIM — the beginner's helping hand (authored, not a slider).
+ *
+ *  The meeting point is predicted, not drawn, and on a phone it is often
+ *  outside the visible play rect near the bat plane. Measured with
+ *  tools/playtest.cjs: a synthetic player with 22 px of aim error returns
+ *  77 % of the balls at level 0 and still loses 0:11 — the misses are one
+ *  capture radius short, almost always in HEIGHT. These fractions pull the
+ *  blade toward the prediction; timing and stroke choice stay the player's.
+ * ------------------------------------------------------------------- */
+const AUTO_AIM_BY_LEVEL = Object.freeze([0.85, 0.62, 0.34, 0.18, 0.10]);
+const AUTO_AIM_HORIZON = 0.55;      // seconds before contact the pull opens
+
 function installUnifiedControls(settings) {
   const fixed = { hitZone: .85, assist: MATCH_RULES.trajectoryAssist,
     posAssist: MATCH_RULES.positionAssist, sensitivity: MATCH_RULES.sensitivity, showZone: true };

@@ -1,0 +1,12 @@
+# dependencies (installed with `npm install`; the lockfile IS committed)
+game/node_modules/
+node_modules/
+
+# python
+__pycache__/
+*.pyc
+
+# local artifacts
+*.log
+.DS_Store
+/tmp/

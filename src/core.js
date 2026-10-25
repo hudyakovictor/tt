@@ -15,16 +15,20 @@ const easeOutBack = (t) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Ma
 const easeInOut = (t) => (t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 /* ---------- состояние (переживает перезапуск, если доступно хранилище) ---------- */
+/* A NEW PLAYER, not a demo account. The old defaults shipped 124 wins,
+ * 2140 rating and level 12 — a fake veteran's identity that (a) told every
+ * beginner they were already good, and (b) fed a 2140 rating into the level
+ * table, so the "first opponent" could be ПРО. Progress is now earned:
+ * 0/0, rating 1000, level 1, one chest, no claimed quests. */
 const DEFAULT_STATE = {
   name: 'Anton Spin', nick: '@anton_tt', club: 'Spin Lab',
-  coins: 1840, gems: 46, level: 12, xp: 1240, xpMax: 1800,
-  rating: 2140, wins: 124, losses: 61, streak: 3, bestRally: 23,
-  passLvl: 7, passXp: 60, premium: false, claimed: { f: [1, 2, 3, 4, 5], p: [] },
+  coins: 300, gems: 5, level: 1, xp: 0, xpMax: 600,
+  rating: 1000, wins: 0, losses: 0, streak: 0, bestRally: 0,
+  passLvl: 1, passXp: 0, premium: false, claimed: { f: [], p: [] },
+  recent: [],                       // last 16 match results, oldest first
   chests: [
     { id: 'c1', kind: 'silver', state: 'ready' },
-    { id: 'c2', kind: 'gold', state: 'unlocking', endsAt: Date.now() + (2 * 3600 + 14 * 60) * 1000 },
-    { id: 'c3', kind: 'epic', state: 'locked' },
-    null
+    null, null, null
   ],
   owned: ['r-teal', 'b-ink', 't-coral'], equipped: { rubber: 'r-teal', blade: 'b-ink', trail: 't-coral' },
   sfx: true, music: true, vibro: true, rm: false, quality: 'high', assist: true, tutorial: true, hint: true, tutorialDone: false

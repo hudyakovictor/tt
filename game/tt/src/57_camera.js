@@ -32,7 +32,8 @@ const CAMERA_PRESETS = {
   DYNAMIC: { id: 'DYNAMIC', ru: 'ОБЗОР', short: 'ОБЗОР',
     desc: 'Выше: легче читать отскок', pitch: 30, vfov: 52, nearY: 0.625, topMin: 0.150 },
   LOW: { id: 'LOW', ru: 'БЛИЖЕ', short: 'БЛИЖЕ',
-    desc: 'Низкий и близкий — взгляд почти с уровня сетки', pitch: 15, vfov: 52, nearY: 0.560, topMin: 0.130 },
+    desc: 'Низкий и близкий — взгляд почти с уровня сетки', pitch: 15, vfov: 52, nearY: 0.560, topMin: 0.130,
+    stanceBack: 1.25 },
 };
 const CAMERA_ORDER = ['BROADCAST', 'DYNAMIC', 'LOW'];
 
@@ -332,8 +333,16 @@ function _shapeRatio(P, aspect, fov) {
 
 if (typeof window !== 'undefined') window.CAMERA_TUNING = CAMERA_TUNING;
 
+/* How far behind the bat plane the camera stands. 0.95 m instead of 1.25:
+ * measured on the shipped projection, moving the eye 30 cm closer draws the
+ * ball 7 % larger at the bat plane (6.1 → 6.5 px radius on a 390×844 phone)
+ * with the same table framing — every framing rule in tests/camera.test.js
+ * still holds. The ball is 40 mm; on a phone 5 % of its diameter is the
+ * difference between "I see it" and "I guessed". */
+const CAMERA_STANCE_BACK = 0.95;
 function _stanceDistance(P) {
-  return CAMERA_TUNING.dMin || (PADDLE_STANCE_Z + 1.25) / Math.cos(P.pitch * DEG);
+  const back = (P && Number.isFinite(P.stanceBack)) ? P.stanceBack : CAMERA_STANCE_BACK;
+  return CAMERA_TUNING.dMin || (PADDLE_STANCE_Z + back) / Math.cos(P.pitch * DEG);
 }
 
 function fitPreset(P, aspect) {

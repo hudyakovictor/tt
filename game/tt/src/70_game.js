@@ -93,6 +93,11 @@ class Game {
       quality: 'high',
       sound: true,
       volume: 0.9,
+      /* BROADCAST stays the default. Measured through the shipped projection
+       * (390x844 and 1280x760): it draws the biggest ball at the bat plane
+       * (12.2 / 19.8 px across vs 10.6 / 15.6 for DYNAMIC) and keeps the
+       * lowest strike 0.185 of a screen above the reading band, where the
+       * thumb and the caption live. DYNAMIC and LOW remain one tap away. */
       camera: 'BROADCAST',
       hand: 'right',
       grip: 'shakehand',
@@ -103,9 +108,10 @@ class Game {
       coach: true,
       adaptive: true,
       showDebug: false,
-      showPlayerPaddle: true,
+      showPlayerPaddle: false,
       slowmoOnBigShots: true,
       targetScore: 11,
+      autoAim: -1,               // -1: authored per difficulty (see autoAimStrength)
       spinBias: 'norm',
       // NEW: Enhanced gameplay settings
       showSpinIndicator: true,
@@ -1900,6 +1906,17 @@ class Game {
     this._ptTarget = { tx: PADDLE_HOME.x, ty: PADDLE_HOME.y, tz: PADDLE_HOME.z };
   }
 
+  /** How hard the blade is pulled toward the predicted meeting point. The
+   * per-difficulty table is an authored rule, not a preference: it is the
+   * difference between "the first opponent is unbeatable" and a fair first
+   * match. A saved settings.autoAim >= 0 overrides it (0 = no help). */
+  autoAimStrength() {
+    const set = Number(this.settings && this.settings.autoAim);
+    if (Number.isFinite(set) && set >= 0) return clamp(set, 0, 1);
+    const lvl = clamp(Math.round(Number(this.settings && this.settings.difficulty) || 0), 0, 4);
+    return AUTO_AIM_BY_LEVEL[lvl] || 0;
+  }
+
   updatePlayerPaddle(dt) {
     const pad = this.player;
     V3.copy(pad.prev, pad.pos);
@@ -2108,19 +2125,39 @@ class Game {
       const under = this.ball.p.y - 0.04;
       ty = lerp(ty, under, this.ball.v.y < 0 ? k : 0.45 * A);
     }
-    /* Contract v3: a short, VISIBLE pull toward the meeting point. The bat
-     * slides to the ball on screen, so a near miss is forgiven honestly instead
-     * of by an invisible half-metre hitbox. */
-    if (MATCH_RULES.magnet > 0 && MATCH_RULES.magnetRadius > 0 && this.recenterT <= 0) {
+    /* ---- AUTO-AIM: the beginner's helping hand ----------------------
+     * Measured with tools/playtest.cjs: a synthetic player with 22 px of aim
+     * error returns 77 % of the balls at level 0 and still loses 0:11,
+     * because every point needs three or four returns in a row. The misses
+     * are not wild — the closest approach is 0.23-0.31 m, one capture radius
+     * outside the blade, almost always in HEIGHT, because the meeting point
+     * is read from a prediction the player cannot see. The blade therefore
+     * slides toward the predicted meeting point: the ramp opens 0.55 s
+     * before contact and closes at contact, so timing and stroke choice stay
+     * the player's while pixel-hunting the height does not.
+     *
+     * Strength: settings.autoAim (0..1) or, when it is negative, an authored
+     * table per difficulty — a novice gets 0.85, a legend 0.10. This is the
+     * "авто-доводка" the design brief asked for, and it is what makes the
+     * capture radius a racket rather than a rumour. */
+    const autoAim = this.autoAimStrength();
+    if (autoAim > 0 && this.recenterT <= 0) {
       const cp = this.contactPrediction();
-      if (cp && cp.t <= MATCH_RULES.magnetHorizon) {
-        const d = Math.hypot(tx - cp.p.x, ty - cp.p.y);
-        if (d < MATCH_RULES.magnetRadius) {
-          const near = 1 - d / MATCH_RULES.magnetRadius;
-          const ramp = clamp(1 - cp.t / MATCH_RULES.magnetHorizon, 0, 1);
-          const k = clamp(MATCH_RULES.magnet * Math.sqrt(near) * (0.35 + 0.65 * ramp), 0, 1);
-          tx = lerp(tx, cp.p.x, k); ty = lerp(ty, cp.p.y, k);
-        }
+      if (cp && cp.t <= AUTO_AIM_HORIZON) {
+        const ramp = clamp(1 - cp.t / AUTO_AIM_HORIZON, 0, 1);
+        const k = clamp(autoAim * (0.30 + 0.70 * ramp), 0, 1);
+        /* The help is a SCREEN instruction: "the ball will be there". The
+         * meeting point lies on another depth plane than the blade, so its
+         * world x/y are not the blade's: the same pixel one plane nearer has
+         * a different y. Unprojecting through the meeting point onto the
+         * blade's own plane keeps the pull under the ball the player sees,
+         * instead of nudging it sideways. */
+        const sp = this.project(cp.p, this._aimPx || (this._aimPx = {}));
+        const world = this._aimWorld || (this._aimWorld = {});
+        const onPlane = sp && sp.ok && typeof unprojectToPlane === 'function' &&
+          unprojectToPlane(this._liveRig, this.R.aspect(), sp.x, sp.y, projZ, world);
+        if (onPlane) { tx = lerp(tx, world.x, k); ty = lerp(ty, world.y, k); }
+        else { tx = lerp(tx, cp.p.x, k); ty = lerp(ty, cp.p.y, k); }
       }
     }
     /* The old position assist pulled the blade toward the ball by up to

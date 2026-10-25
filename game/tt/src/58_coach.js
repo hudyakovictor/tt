@@ -262,9 +262,11 @@ class MatchDirector {
   reset() { this.streak = 0; this.handicap = 1; this.history.length = 0; }
 
   /**
-   * Nudge the opponent's handicap after every point. The window is
-   * deliberately narrow (0.86 … 1.03) — enough to stop a blow-out from
-   * feeling hopeless, far too small to hand anybody a free win.
+   * Nudge the opponent's handicap after every point. The window used to be
+   * 0.86 … 1.03, which measured as no help at all: a synthetic beginner lost
+   * 0:11 with the director pinned at its floor. The floor is now 0.62 — the
+   * bot's misses roughly double — while a player who is winning still faces
+   * a slightly sharper opponent (1.06). Still a nudge, not a free win.
    */
   onPoint(who, levelIndex) {
     this.history.push(who > 0 ? 1 : -1);
@@ -279,12 +281,13 @@ class MatchDirector {
 
     // target: the player should be winning somewhere around 40-60 %
     let want = 1;
-    if (share < 0.30) want = 0.88;
-    else if (share < 0.42) want = 0.94;
-    else if (share > 0.72) want = 1.03;
+    if (share < 0.20) want = 0.62;
+    else if (share < 0.30) want = 0.72;
+    else if (share < 0.42) want = 0.84;
+    else if (share > 0.72) want = 1.06;
     else want = 1.0;
-    if (this.streak <= -4) want = Math.min(want, 0.86);
-    if (this.streak >= 4) want = Math.max(want, 1.03);
+    if (this.streak <= -4) want = Math.min(want, 0.62);
+    if (this.streak >= 4) want = Math.max(want, 1.06);
 
     this.handicap = lerp(this.handicap, want, 0.5);
     return this.handicap;

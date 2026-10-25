@@ -221,7 +221,12 @@ class OpponentAI {
   }
 
   /** Dynamic difficulty */
-  setHandicap(h) { this.handicap = clamp(h, 0.80, 1.05); }
+  /* 0.55, not 0.80: the old window could not rescue a blow-out. Measured
+   * with tools/playtest.cjs: 0:11 against the rookie while the director was
+   * pinned at 0.86 — an 8 % nudge on a 40 % skill gap is not a comeback, it
+   * is decoration. The floor is still far from a free win: the level-2 bot
+   * at 0.55 misses about a fifth of its returns. */
+  setHandicap(h) { this.handicap = clamp(h, 0.55, 1.10); }
 
   rollTactic() {
     const L = this.L;
@@ -421,6 +426,66 @@ class OpponentAI {
     // Solve on copies. The game applies the returned impact exactly once.
     strokeFrame(racket, 0, 0, 1, racket.vR, racket.normal);
     racket = refineRacket(ball.p, ball.v, ball.w, racket, L.skill, racket.quality);
+    /* ---- EXECUTION ERROR: the level's own hands ---------------------
+     * errBase / errPress are authored per level (0.38 / 0.16 for the rookie,
+     * 0.04 / 0.03 for the legend) but NOTHING ever read them, so every bot
+     * returned like a wall: measured with tools/playtest.cjs, the level-0
+     * opponent lost 2 points in 24 while a precise synthetic player still
+     * went 0:11. The solver's job is a legal stroke; the level's job is how
+     * often the hand betrays the plan. So the error lands AFTER the solve:
+     *   · 'short' — the swing is too slow, the ball dies on the bot's half
+     *     or in the net (the common beginner miss);
+     *   · 'long'  — the face opens a few degrees and the return sails out.
+     * Pressure adds errPress; the adaptive handicap divides the odds, so a
+     * player who is being blown out sees fewer of them. */
+    racket.miss = null;
+    this._missP = 0;
+    const pressure = clamp(this.pressure || 0, 0, 1);
+    const missP = clamp((L.errBase * (1 + pressure * L.errPress * 6)) / (this.handicap || 1), 0, .8);
+    this._missP = missP;
+    /* Does the shot still land legally? A 40 % slower swing often survives
+     * the solver's margin, so a "miss" could be a perfectly good return with
+     * a different number on it. The error is escalated until the outcome is
+     * what the level actually deserves. */
+    const stillLegal = () => {
+      if (typeof predict !== 'function' || typeof launchPoint !== 'function') return false;
+      const o = {};
+      predict(V3.clone(launchPoint(ball.p, racket.normal)), V3.clone(racket.vR), V3.clone(racket.w || ball.w),
+        { dt: 1 / 280, maxT: 2.4, stopOnFirstBounce: true, out: o });
+      return !!(o.landed && o.landed.z < 0 && Math.abs(o.landed.x) <= PH.T_HALF_WID + .01 && !o.hitNet);
+    };
+    if (Math.random() < missP) {
+      if (Math.random() < .58) {
+        for (let i = 0; i < 4; i++) {
+          const k = (i === 0 ? .58 + Math.random() * .20 : .80);
+          V3.mul(racket.vR, racket.vR, k);
+          racket.vmag *= k;
+          if (!stillLegal()) break;
+        }
+        racket.miss = 'short';
+      } else {
+        /* Open the face AND lift the swing: rotating both by the same angle
+         * tilted the whole shot without changing where it landed — measured
+         * 31 net errors to 1 long error. The face opens twice as far as the
+         * swing, which is what a late, scooping contact actually does. */
+        for (let i = 0; i < 4; i++) {
+          const up = (7 + Math.random() * 4 + i * 3) * DEG;
+          const v = racket.vR;
+          const vy = v.y * Math.cos(up) - v.z * Math.sin(up);
+          const vz = v.y * Math.sin(up) + v.z * Math.cos(up);
+          v.y = vy; v.z = vz;
+          V3.mul(v, v, 1.10 + i * .05);
+          const n = racket.normal;
+          const ny = n.y * Math.cos(up * 2) - n.z * Math.sin(up * 2);
+          const nz = n.y * Math.sin(up * 2) + n.z * Math.cos(up * 2);
+          n.y = ny; n.z = nz;
+          if (!stillLegal()) break;
+        }
+        racket.miss = 'long';
+      }
+      racket.quality *= .55;
+      this.stats.errors++;
+    }
     V3.copy(this.faceNormal, racket.normal);
     this.lastStrokeId = archId;
     this.phase = 'SWING';
@@ -525,6 +590,19 @@ class OpponentAI {
     if (!finalRacket.valid && this.handicap < 0.999) {
       finalRacket = refineRacket(ball.p, ball.v, ball.w, racketFromStroke,
         1, racket.quality);
+    }
+
+    /* A rookie's serve misses too, but at a third of the rally rate: a
+     * serve fault hands over a point nobody played for, and the level that
+     * is supposed to be beatable must not gift more of them than a real
+     * beginner. Applied after the solver, like the rally error. */
+    if (Math.random() < clamp(this.L.errBase * .30, 0, .22)) {
+      const k = .58;
+      V3.mul(finalRacket.vR, finalRacket.vR, k);
+      finalRacket.vmag *= k;
+      finalRacket.valid = false;
+      finalRacket.miss = 'serve-short';
+      this.stats.errors++;
     }
 
     return finalRacket;

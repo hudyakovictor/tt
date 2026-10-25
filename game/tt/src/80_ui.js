@@ -1253,13 +1253,17 @@ class UI {
     c.stroke(); c.restore();
   }
 
-  /** Only the racket is visible over live play; dialogs retain their cursor. */
+  /** The pointer is the blade while the blade is drawn; when the blade is
+   *  hidden (the default: it covered the ball) hiding the cursor too would
+   *  leave a desktop player with no reference at all. */
   syncNativeCursor() {
     const g = this.game, canvas = g && g.canvas;
     if (!canvas) return;
     const playing = [GS.SERVE_READY, GS.SERVE_TOSS, GS.RALLY, GS.POINT].includes(g.state);
     const dialog = typeof document !== 'undefined' && document.querySelector('.screen.on');
-    const cursor = playing && !this.captureDebug && !g.paused && !(g.replayer && g.replayer.on) && !dialog ? 'none' : 'default';
+    const bladeDrawn = !(g.settings && g.settings.showPlayerPaddle === false);
+    const cursor = playing && bladeDrawn && !this.captureDebug && !g.paused &&
+      !(g.replayer && g.replayer.on) && !dialog ? 'none' : 'default';
     if (canvas.style.cursor !== cursor) canvas.style.cursor = cursor;
   }
 
@@ -1307,6 +1311,52 @@ class UI {
     c.restore();
   }
 
+  /** The blade is hidden by default (it covered the ball), so the pointer
+   *  needs SOME visible anchor: a small open reticle exactly where the
+   *  blade's centre stands. Thin strokes and a hollow middle, so the ball
+   *  stays readable even when it passes underneath — it is an aiming aid,
+   *  not a second paddle. Drawn only while the blade is hidden. */
+  drawBladeReticle(c, W, H, d) {
+    const g = this.game;
+    if (!g || g.paused || (g.replayer && g.replayer.on)) return false;
+    if (!(g.settings && g.settings.showPlayerPaddle === false)) return false;
+    if (![GS.SERVE_READY, GS.SERVE_TOSS, GS.RALLY].includes(g.state)) return false;
+    const p = g.player && g.player.pos;
+    if (!p) return false;
+    const q = g.project(p, this._pv);
+    if (!q || !q.ok || !Number.isFinite(q.x) || !Number.isFinite(q.y)) return false;
+    const x = q.x * W, y = q.y * H;
+    if (x < 0 || x > W || y < 0 || y > H) return false;
+    /* The contact flash and the touch ripple are bright white too, and the
+     * reticle used to vanish into them right at the moment of contact. A
+     * thin dark halo (drawn first, wider) keeps it legible over the flare
+     * without making the reticle itself heavy. */
+    const r = 10 * d, gap = 2.6 * d;
+    c.save();
+    c.strokeStyle = 'rgba(0,0,0,.45)';
+    c.lineWidth = 3.6 * d;
+    for (let i = 0; i < 4; i++) {
+      const a = i * Math.PI / 2 + Math.PI / 4 + .34;
+      c.beginPath();
+      c.arc(x, y, r, a, a + Math.PI / 2 - .68);
+      c.stroke();
+    }
+    c.strokeStyle = 'rgba(255,255,255,.72)';
+    c.lineWidth = 1.4 * d;
+    c.lineCap = 'round';
+    /* four arcs, open at the diagonals: the ball is never fully enclosed */
+    for (let i = 0; i < 4; i++) {
+      const a = i * Math.PI / 2 + Math.PI / 4 + .34;
+      c.beginPath();
+      c.arc(x, y, r, a, a + Math.PI / 2 - .68);
+      c.stroke();
+    }
+    c.fillStyle = 'rgba(255,255,255,.85)';
+    c.beginPath(); c.arc(x, y, gap * .55, 0, TAU); c.fill();
+    c.restore();
+    return true;
+  }
+
   drawOverlay(dt) {
     const g = this.game, c = this.fxg, W = this.fx.width, H = this.fx.height, d = this.dpr;
     c.clearRect(0, 0, W, H);
@@ -1314,6 +1364,7 @@ class UI {
 
     // bracket strike ring: only inside training — matches show the pinned mark
     if (!this.captureDebug && !this.drawCoach(c, W, H, d) && this.game && this.game.training) this.drawStrikeRing(c, W, H, d);
+    if (!this.captureDebug) this.drawBladeReticle(c, W, H, d);
     this.drawCaptureDebug(c, W, H, d);
     this.syncNativeCursor();
 
